@@ -1,0 +1,701 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Stake Splitter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout concept: one working column. Inputs first, a plain-language verdict, then three tools
+   (cover every result, build a mix, check a parlay) that each answer one question about cost and risk. */
+:root{
+  --bg:#EEF2F0; --surface:#FFFFFF; --surface-2:#E3EAE7; --fg:#13201C; --muted:#4F5F59; --line:#C6D1CC;
+  --accent:#1D4F91; --accent-fg:#FFFFFF; --gain:#17783F; --loss:#B3261E; --warn:#8A5A00;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1412; --surface:#161E1B; --surface-2:#1F2A26; --fg:#E4ECE8; --muted:#9BACA5; --line:#2D3B36;
+    --accent:#8DB8F2; --accent-fg:#0E1412; --gain:#5FCB8A; --loss:#FF8F85; --warn:#E3B04B; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1412; --surface:#161E1B; --surface-2:#1F2A26; --fg:#E4ECE8; --muted:#9BACA5; --line:#2D3B36;
+  --accent:#8DB8F2; --accent-fg:#0E1412; --gain:#5FCB8A; --loss:#FF8F85; --warn:#E3B04B; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--fg); font:400 15px/1.55 var(--body);
+  padding-block:28px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:980px;margin:0 auto}
+h1{font:700 clamp(30px,6vw,44px)/1.05 var(--display);letter-spacing:-0.02em;margin:0 0 10px;text-wrap:balance}
+h2{font:600 22px/1.2 var(--display);letter-spacing:-0.01em;margin:0 0 6px;text-wrap:balance}
+h3{font:600 12px/1.3 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+p{margin:0 0 10px}
+.lede{color:var(--muted);max-width:64ch;font-size:16px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+section{margin-top:44px}
+.intro{color:var(--muted);max-width:68ch;margin-bottom:16px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label,.rowlabel{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+input[type=text],select{
+  font:500 16px/1.2 var(--mono);color:var(--fg);background:var(--surface);
+  border:1px solid var(--line);border-radius:4px;padding:10px 11px;width:100%;min-width:0;
+}
+input[type=text].plain{font-family:var(--body);font-weight:400}
+input[type=text]:disabled{opacity:.45}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.oddsrow{display:grid;grid-template-columns:170px repeat(3,minmax(0,1fr));gap:10px 12px;align-items:end;margin-top:16px}
+.oddsrow .rowlabel{align-self:center;padding-bottom:10px}
+.oddsrow .field label{text-transform:none;letter-spacing:0;font-weight:500;font-size:13px;overflow-wrap:anywhere}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.btn,.chip{
+  font:500 14px/1.2 var(--body);color:var(--fg);background:var(--surface);border:1px solid var(--line);
+  border-radius:4px;padding:9px 13px;cursor:pointer;
+}
+.btn:hover,.chip:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.sm{padding:6px 10px;font-size:13px}
+.chip{padding:6px 10px;font-family:var(--mono);font-size:13px}
+.chip.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.sample{font-size:13px;color:var(--muted);margin:0}
+
+#verdict{background:var(--surface-2);border-radius:6px;padding:22px 20px;margin-top:28px}
+#verdict .big{font:600 clamp(20px,3.6vw,27px)/1.25 var(--display);letter-spacing:-0.01em;margin:0 0 8px;text-wrap:balance}
+#verdict p.sub{margin:0;color:var(--muted);max-width:70ch}
+.loss{color:var(--loss)} .gain{color:var(--gain)} .warn{color:var(--warn)}
+
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+th.num{text-align:right}
+td.split div{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:3px;padding:1px 6px;margin-left:6px;color:var(--muted)}
+td input[type=text]{max-width:120px;text-align:right}
+td.in-cell{text-align:right}
+
+.status{font-size:14px;margin:10px 0 0}
+.objs{display:flex;gap:6px 18px;flex-wrap:wrap;margin:14px 0 4px}
+.objs label{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px}
+.optrow{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+.optrow .field{width:120px}
+.optnote{font-size:13px;color:var(--muted);margin:10px 0 0;max-width:72ch}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin:22px 0 6px}
+.metric span{display:block;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.metric b{display:block;font:500 21px/1.3 var(--mono);font-variant-numeric:tabular-nums;margin-top:2px}
+.story{max-width:72ch;margin:14px 0 18px}
+.prow{display:grid;grid-template-columns:104px minmax(0,1fr);gap:3px 14px;padding:11px 0;border-bottom:1px solid var(--line)}
+.prow:first-of-type{border-top:1px solid var(--line)}
+.prow .net{font:500 15px/1.5 var(--mono);font-variant-numeric:tabular-nums}
+.barline{display:flex;align-items:center;gap:10px}
+.bar{flex:1;height:10px;background:var(--surface-2);border-radius:2px;overflow:hidden;min-width:0}
+.bar i{display:block;height:100%}
+.bar i.l{background:var(--loss)} .bar i.g{background:var(--gain)} .bar i.z{background:var(--muted)}
+.barline em{font:500 13px var(--mono);font-style:normal;min-width:56px;text-align:right;font-variant-numeric:tabular-nums}
+.prow .meta{grid-column:2;font-size:13px;color:var(--muted)}
+details{margin-top:22px}
+summary{cursor:pointer;font-weight:500}
+details .tablewrap{margin-top:12px}
+
+.legrow{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end;margin-bottom:12px}
+.legrow .field label{text-transform:none;letter-spacing:0;font-weight:500;font-size:13px}
+.notes{padding-left:18px;margin:0;max-width:74ch}
+.notes li{margin-bottom:8px}
+
+@media (max-width:640px){
+  .row3{grid-template-columns:1fr 1fr}
+  .row3 .field:first-child,.row3 .field:nth-child(2){grid-column:span 1}
+  .row3 .stakefield{grid-column:1/-1}
+  .oddsrow{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .oddsrow .rowlabel{grid-column:1/-1;padding-bottom:0}
+  .legrow{grid-template-columns:1fr 1fr}
+  .legrow .lab{grid-column:1/-1}
+  .prow{grid-template-columns:1fr}
+  .prow .meta{grid-column:1}
+  .panel{padding:14px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .bar i{transition:width .25s ease}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Stake Splitter</h1>
+    <p class="lede">Type in the odds Parimatch shows for a match. The maths shows what each way of splitting your stake locks in, what it risks, and what it costs you on average.</p>
+  </header>
+
+  <section id="setup" style="margin-top:28px">
+    <div class="panel">
+      <div class="row3">
+        <div class="field"><label for="t_home">Home team</label><input class="in plain" type="text" id="t_home" value="Home team" autocomplete="off"></div>
+        <div class="field"><label for="t_away">Away team</label><input class="in plain" type="text" id="t_away" value="Away team" autocomplete="off"></div>
+        <div class="field stakefield">
+          <label for="stake">Total to bet (₹)</label>
+          <input class="in" type="text" inputmode="decimal" id="stake" value="250" autocomplete="off">
+        </div>
+      </div>
+      <div class="chips" id="chips" style="margin-top:10px">
+        <button class="chip" data-v="100" type="button">₹100</button>
+        <button class="chip" data-v="200" type="button">₹200</button>
+        <button class="chip" data-v="250" type="button">₹250</button>
+        <button class="chip" data-v="500" type="button">₹500</button>
+      </div>
+
+      <div class="oddsrow">
+        <div class="rowlabel">Match result</div>
+        <div class="field"><label for="o_h" id="lab_h">Home win</label><input class="in" type="text" inputmode="decimal" id="o_h" value="2.10" autocomplete="off"></div>
+        <div class="field"><label for="o_d">Draw</label><input class="in" type="text" inputmode="decimal" id="o_d" value="3.40" autocomplete="off"></div>
+        <div class="field"><label for="o_a" id="lab_a">Away win</label><input class="in" type="text" inputmode="decimal" id="o_a" value="3.30" autocomplete="off"></div>
+      </div>
+      <div class="oddsrow">
+        <div class="rowlabel">Goals, line 2.5</div>
+        <div class="field"><label for="o_ov">Over 2.5</label><input class="in" type="text" inputmode="decimal" id="o_ov" value="1.90" autocomplete="off"></div>
+        <div class="field"><label for="o_un">Under 2.5</label><input class="in" type="text" inputmode="decimal" id="o_un" value="1.90" autocomplete="off"></div>
+        <div></div>
+      </div>
+      <div class="oddsrow">
+        <div class="rowlabel">Both teams score</div>
+        <div class="field"><label for="o_by">Yes</label><input class="in" type="text" inputmode="decimal" id="o_by" value="1.80" autocomplete="off"></div>
+        <div class="field"><label for="o_bn">No</label><input class="in" type="text" inputmode="decimal" id="o_bn" value="2.00" autocomplete="off"></div>
+        <div></div>
+      </div>
+      <div class="tools">
+        <p class="sample">Example odds are filled in. Replace them with the decimal odds on the match page.</p>
+        <button class="btn sm" type="button" id="reset">Reset to examples</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="verdict" aria-live="polite"></div>
+
+  <section id="lock">
+    <h2>Cover every result</h2>
+    <p class="intro">Split the money so you get the same amount back whichever outcome in a market happens. This is the only split that removes the risk of losing on the day, and its price is the bookmaker's margin.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Market</th><th class="num">Margin</th><th>Stake on each</th><th class="num">You always get</th><th class="num">Result</th><th></th></tr></thead>
+        <tbody id="locktable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="mix">
+    <h2>Build your own mix</h2>
+    <p class="intro">Put a stake on any bets below, or let the search find a split for a goal you pick. The profile underneath shows what you would get for every way the match can finish, using the bookmaker's own chances, worked out from the odds you typed.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Bet</th><th class="num">Odds</th><th class="num">Stake (₹)</th><th class="num">Returned if it wins</th></tr></thead>
+        <tbody id="mixtable"></tbody>
+      </table>
+    </div>
+    <p class="status" id="mixstatus"></p>
+
+    <div class="objs" role="radiogroup" aria-label="What to optimise for">
+      <label><input type="radio" name="obj" id="obj_floor" value="floor"> Smallest worst case</label>
+      <label><input type="radio" name="obj" id="obj_keep" value="keep" checked> Best chance of keeping my money</label>
+      <label><input type="radio" name="obj" id="obj_ev" value="ev"> Smallest average loss</label>
+    </div>
+    <div class="optrow">
+      <div class="field"><label for="step">Round stakes to</label>
+        <select class="in" id="step"><option value="1">₹1</option><option value="5" selected>₹5</option><option value="10">₹10</option></select>
+      </div>
+      <button class="btn primary" type="button" id="optimize">Find a split</button>
+      <button class="btn" type="button" id="clearmix">Clear stakes</button>
+    </div>
+    <p class="optnote" id="optnote"></p>
+
+    <div id="mixout"></div>
+
+    <details>
+      <summary>How the goals model reads your odds</summary>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Outcome</th><th class="num">Bookmaker chance, margin removed</th><th class="num">Goals model alone</th></tr></thead>
+          <tbody id="fittable"></tbody>
+        </table>
+      </div>
+      <p class="small muted" id="fitnote" style="margin-top:10px"></p>
+    </details>
+  </section>
+
+  <section id="parlay">
+    <h2>Parlay check</h2>
+    <p class="intro">Each leg of a parlay carries its own margin, and the margins multiply. Enter the legs from different matches to see the odds you are really getting.</p>
+    <div class="panel">
+      <div id="legs"></div>
+      <div class="tools" style="margin-top:4px"><button class="btn sm" type="button" id="addleg">Add a leg</button></div>
+      <div id="parlayout"></div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <h2>What this can and cannot do</h2>
+    <ul class="notes">
+      <li>It cannot read Parimatch. Odds move, so type them in just before you bet.</li>
+      <li>Covering every result on one bookmaker's odds always loses the margin. A guaranteed profit only exists when two bookmakers price the same match differently, and those gaps close within minutes.</li>
+      <li>The outcome profile uses a Poisson goals model fitted to your odds. It treats the two teams' goals as independent and knows nothing about line-ups, cards or late news.</li>
+      <li>Goalscorer bets are left out because no split can cover them, and they usually carry a larger margin than the markets above.</li>
+      <li>Parlay legs from the same match are linked, so the chance shown for them is not reliable. Use legs from different matches.</li>
+      <li>If betting stops feeling like a choice, Tele-MANAS (14416) is a free helpline in India, open every day at all hours.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function(){
+'use strict';
+var N=10;
+function $(id){return document.getElementById(id);}
+function numOf(id){var v=parseFloat(String($(id).value).replace(',','.'));return isFinite(v)?v:NaN;}
+function parseNum(s){var v=parseFloat(String(s).replace(',','.'));return isFinite(v)?v:NaN;}
+function oddsOf(id){var v=numOf(id);return v>1.0001?v:null;}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function money(v,d){d=d==null?2:d;var s=Math.abs(v).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d});return (v<-0.004?'−':'')+'₹'+s;}
+function smoney(v){if(Math.abs(v)<0.005)return '₹0.00';return (v>0?'+':'−')+'₹'+Math.abs(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function pct(v,d){d=d==null?1:d;return (v*100).toFixed(d)+'%';}
+function cls(v){return v>0.004?'gain':(v<-0.004?'loss':'');}
+function tn(k){var v=$('t_'+k).value.trim();return v||(k==='home'?'Home team':'Away team');}
+
+var BETS=[
+  {id:'h',oid:'o_h',label:function(){return tn('home')+' win';},win:function(x,y){return x>y;}},
+  {id:'d',oid:'o_d',label:function(){return 'Draw';},win:function(x,y){return x===y;}},
+  {id:'a',oid:'o_a',label:function(){return tn('away')+' win';},win:function(x,y){return x<y;}},
+  {id:'ov',oid:'o_ov',label:function(){return 'Over 2.5 goals';},win:function(x,y){return x+y>=3;}},
+  {id:'un',oid:'o_un',label:function(){return 'Under 2.5 goals';},win:function(x,y){return x+y<=2;}},
+  {id:'by',oid:'o_by',label:function(){return 'Both teams score';},win:function(x,y){return x>0&&y>0;}},
+  {id:'bn',oid:'o_bn',label:function(){return 'Not both teams score';},win:function(x,y){return x===0||y===0;}}
+];
+var MARKETS=[
+  {name:'Match result',ids:[0,1,2]},
+  {name:'Over / under 2.5 goals',ids:[3,4]},
+  {name:'Both teams to score',ids:[5,6]}
+];
+function oddsArr(){return BETS.map(function(b){return oddsOf(b.oid);});}
+
+/* ---------- goals model ---------- */
+function pmf(l){var a=[Math.exp(-l)];for(var k=1;k<=N;k++)a.push(a[k-1]*l/k);return a;}
+function evalPair(ph,pa,t){
+  var tot=0,H=0,D=0,A=0,O=0,B=0,x,y,p;
+  for(x=0;x<=N;x++)for(y=0;y<=N;y++){
+    p=ph[x]*pa[y];tot+=p;
+    if(x>y)H+=p;else if(x===y)D+=p;else A+=p;
+    if(x+y>=3)O+=p;
+    if(x>0&&y>0)B+=p;
+  }
+  H/=tot;D/=tot;A/=tot;O/=tot;B/=tot;
+  var e=Math.pow(H-t.h,2)+Math.pow(D-t.d,2)+Math.pow(A-t.a,2);
+  if(t.ov!=null)e+=Math.pow(O-t.ov,2);
+  if(t.bt!=null)e+=0.5*Math.pow(B-t.bt,2);
+  return {e:e,H:H,D:D,A:A,O:O,B:B};
+}
+function fitModel(t){
+  var grid=[],pm=[],l,i,j;
+  for(l=0.1;l<=3.65;l+=0.05){grid.push(l);pm.push(pmf(l));}
+  var best={e:1e9,lh:1,la:1};
+  for(i=0;i<grid.length;i++)for(j=0;j<grid.length;j++){
+    var r=evalPair(pm[i],pm[j],t);
+    if(r.e<best.e)best={e:r.e,lh:grid[i],la:grid[j]};
+  }
+  var b2={e:best.e,lh:best.lh,la:best.la},lh,la;
+  for(lh=best.lh-0.06;lh<=best.lh+0.0601;lh+=0.01){
+    for(la=best.la-0.06;la<=best.la+0.0601;la+=0.01){
+      if(lh<0.05||la<0.05)continue;
+      var r2=evalPair(pmf(lh),pmf(la),t);
+      if(r2.e<b2.e)b2={e:r2.e,lh:lh,la:la};
+    }
+  }
+  var fin=evalPair(pmf(b2.lh),pmf(b2.la),t);
+  return {lh:b2.lh,la:b2.la,H:fin.H,D:fin.D,A:fin.A,O:fin.O,B:fin.B,t:t};
+}
+var model=null,groups=[],lastKey='';
+function buildModel(){
+  var h=oddsOf('o_h'),d=oddsOf('o_d'),a=oddsOf('o_a');
+  if(!h||!d||!a){model=null;groups=[];lastKey='';return;}
+  var s=1/h+1/d+1/a;
+  var t={h:1/h/s,d:1/d/s,a:1/a/s,ov:null,bt:null};
+  var ov=oddsOf('o_ov'),un=oddsOf('o_un');if(ov&&un)t.ov=(1/ov)/(1/ov+1/un);
+  var by=oddsOf('o_by'),bn=oddsOf('o_bn');if(by&&bn)t.bt=(1/by)/(1/by+1/bn);
+  var key=JSON.stringify([t.h.toFixed(5),t.d.toFixed(5),t.a.toFixed(5),t.ov==null?null:t.ov.toFixed(5),t.bt==null?null:t.bt.toFixed(5)]);
+  if(key===lastKey&&model)return;
+  lastKey=key;
+  model=fitModel(t);
+  var ph=pmf(model.lh),pa=pmf(model.la),tot=0,x,y,map={};
+  for(x=0;x<=N;x++)for(y=0;y<=N;y++)tot+=ph[x]*pa[y];
+  for(x=0;x<=N;x++)for(y=0;y<=N;y++){
+    var p=ph[x]*pa[y]/tot,mask=0;
+    BETS.forEach(function(b,i){if(b.win(x,y))mask|=(1<<i);});
+    var g=map[mask];
+    if(!g){g=map[mask]={mask:mask,p:0,cells:[],res:x>y?'h':(x===y?'d':'a'),ou:(x+y>=3)?'ov':'un',bt:(x>0&&y>0)?'by':'bn'};}
+    g.p+=p;g.cells.push({x:x,y:y,p:p});
+  }
+  groups=Object.keys(map).map(function(k){return map[k];});
+  rake(groups,t);
+}
+/* Nudge the goals model so every market matches the bookmaker's own chances exactly.
+   The goals model then only decides how the markets overlap. */
+function rake(gs,t){
+  gs.forEach(function(g){g.p0=g.p;});
+  var dims=[['res',{h:t.h,d:t.d,a:t.a}],
+            ['ou',t.ov==null?null:{ov:t.ov,un:1-t.ov}],
+            ['bt',t.bt==null?null:{by:t.bt,bn:1-t.bt}]];
+  for(var it=0;it<80;it++){
+    dims.forEach(function(dim){
+      if(!dim[1])return;
+      var cur={};
+      gs.forEach(function(g){cur[g[dim[0]]]=(cur[g[dim[0]]]||0)+g.p;});
+      gs.forEach(function(g){var c=cur[g[dim[0]]];if(c>0)g.p*=dim[1][g[dim[0]]]/c;});
+    });
+  }
+  gs.forEach(function(g){
+    var f=g.p0>0?g.p/g.p0:1;
+    g.cells.forEach(function(c){c.p*=f;});
+  });
+}
+function stats(s,o){
+  var tot=0,i;for(i=0;i<s.length;i++)tot+=s[i];
+  var min=Infinity,max=-Infinity,ev=0,pNo=0,pWin=0;
+  groups.forEach(function(g){
+    var r=0;for(i=0;i<s.length;i++){if(s[i]&&((g.mask>>i)&1))r+=s[i]*o[i];}
+    var net=r-tot;
+    ev+=g.p*net;if(net>=-0.005)pNo+=g.p;if(net>0.005)pWin+=g.p;
+    if(g.p>1e-4){if(net<min)min=net;if(net>max)max=net;}
+  });
+  if(min===Infinity){min=0;max=0;}
+  return {tot:tot,min:min,max:max,ev:ev,pNo:pNo,pWin:pWin};
+}
+function alloc(w,units){
+  var tot=0,i;for(i=0;i<w.length;i++)tot+=w[i];
+  var out=w.map(function(){return 0;});if(tot<=0)return out;
+  var raw=w.map(function(x){return x/tot*units;}),used=0;
+  for(i=0;i<w.length;i++){out[i]=Math.floor(raw[i]);used+=out[i];}
+  var idx=w.map(function(_,k){return k;}).sort(function(a,b){return (raw[b]-out[b])-(raw[a]-out[a]);});
+  for(var k=0;used<units&&k<idx.length;k++,used++)out[idx[k]]++;
+  return out;
+}
+function optimize(obj,step){
+  var S=numOf('stake');if(!isFinite(S)||S<=0||!model)return null;
+  var o=oddsArr(),valid=[];o.forEach(function(x,i){if(x)valid.push(i);});
+  if(!valid.length)return null;
+  var units=Math.max(1,Math.round(S/step));
+  function score(a){
+    var s=a.map(function(x){return x*step;}),st=stats(s,o);
+    if(obj==='floor')return st.min+1e-3*st.ev;
+    if(obj==='keep')return st.pNo+1e-3*st.min/S+1e-4*st.ev/S;
+    return st.ev;
+  }
+  function climb(a){
+    var best=score(a),deltas=[],d;
+    for(d=Math.max(1,Math.floor(units/4));d>=1;d=Math.floor(d/2)){deltas.push(d);if(d===1)break;}
+    deltas.forEach(function(dl){
+      var improved=true,guard=0;
+      while(improved&&guard++<300){
+        improved=false;
+        for(var ii=0;ii<valid.length;ii++)for(var jj=0;jj<valid.length;jj++){
+          var i=valid[ii],j=valid[jj];
+          if(i===j||a[i]<dl)continue;
+          a[i]-=dl;a[j]+=dl;
+          var sc=score(a);
+          if(sc>best+1e-12){best=sc;improved=true;}else{a[i]+=dl;a[j]-=dl;}
+        }
+      }
+    });
+    return {a:a,sc:best};
+  }
+  var seeds=[],n=valid.length;
+  for(var m=1;m<(1<<n);m++){
+    var w=BETS.map(function(){return 0;});
+    for(var k=0;k<n;k++)if((m>>k)&1)w[valid[k]]=1/o[valid[k]];
+    var a0=alloc(w,units);seeds.push({a:a0,sc:score(a0)});
+  }
+  seeds.sort(function(x,y){return y.sc-x.sc;});
+  var best=null;
+  for(var t=0;t<Math.min(5,seeds.length);t++){
+    var r=climb(seeds[t].a.slice());
+    if(!best||r.sc>best.sc)best=r;
+  }
+  return best.a.map(function(x){return x*step;});
+}
+
+/* ---------- covering a market ---------- */
+function lockFor(mk,S){
+  var o=oddsArr(),inv=0,i;
+  for(i=0;i<mk.ids.length;i++){var od=o[mk.ids[i]];if(!od)return null;inv+=1/od;}
+  var ret=S/inv;
+  return {mk:mk,inv:inv,margin:inv-1,ret:ret,net:ret-S,stakes:mk.ids.map(function(id){return S*(1/o[id])/inv;})};
+}
+function locksAll(S){return MARKETS.map(function(mk){return lockFor(mk,S);});}
+
+/* ---------- rendering ---------- */
+function renderVerdict(S,locks){
+  var el=$('verdict');
+  if(!isFinite(S)||S<=0){el.innerHTML='<p class="big">Enter how much you want to bet.</p>';return;}
+  var ok=locks.filter(Boolean);
+  if(!ok.length){el.innerHTML='<p class="big">Enter odds above to see what the maths says.</p>';return;}
+  var best=ok.reduce(function(a,b){return b.net>a.net?b:a;});
+  var html;
+  if(best.net>0.005){
+    html='<p class="big">These odds leave a gap: covering every result in <span class="gain">'+esc(best.mk.name)+'</span> returns '+money(best.ret)+' on '+money(S)+', a sure <span class="gain">'+smoney(best.net)+'</span>.</p>'+
+      '<p class="sub">Check that each number is typed exactly as shown and still live. Gaps like this are rare and usually mean a typo or a price about to be corrected.</p>';
+  }else if(Math.abs(best.net)<=0.005){
+    html='<p class="big">Covering every result gets your '+money(S)+' back and nothing more.</p><p class="sub">There is no margin to pay and no profit to make on these odds.</p>';
+  }else{
+    html='<p class="big">The cheapest way to be fully covered still loses <span class="loss">'+money(-best.net)+'</span> for certain.</p>'+
+      '<p class="sub">That is '+esc(best.mk.name)+', where the bookmaker margin is '+pct(best.margin)+'. Any other split you build pays this margin on average. Splitting changes when you lose and how much, not whether.</p>';
+  }
+  el.innerHTML=html;
+}
+function renderLock(S,locks){
+  var tb=$('locktable');
+  if(!isFinite(S)||S<=0){tb.innerHTML='<tr><td colspan="6" class="muted">Enter a total to bet.</td></tr>';return;}
+  var ok=locks.filter(Boolean),bestNet=ok.length?Math.max.apply(null,ok.map(function(l){return l.net;})):null;
+  tb.innerHTML=locks.map(function(l,mi){
+    var mk=MARKETS[mi];
+    if(!l)return '<tr><td>'+esc(mk.name)+'</td><td colspan="5" class="muted">Needs odds for every outcome in this market.</td></tr>';
+    var split=mk.ids.map(function(id,k){return '<div>'+esc(BETS[id].label())+' '+money(l.stakes[k])+'</div>';}).join('');
+    var isBest=ok.length>1&&Math.abs(l.net-bestNet)<1e-9;
+    return '<tr><td>'+esc(mk.name)+(isBest?'<span class="tag">Cheapest</span>':'')+'</td>'+
+      '<td class="num">'+pct(l.margin)+'</td><td class="split">'+split+'</td>'+
+      '<td class="num">'+money(l.ret)+'</td><td class="num '+cls(l.net)+'">'+smoney(l.net)+'</td>'+
+      '<td><button class="btn sm" type="button" data-lock="'+mi+'">Use this split</button></td></tr>';
+  }).join('');
+}
+function renderFit(){
+  var tb=$('fittable'),note=$('fitnote');
+  if(!model){tb.innerHTML='<tr><td colspan="3" class="muted">Enter odds for home win, draw and away win.</td></tr>';note.textContent='';return;}
+  var t=model.t;
+  var rows=[
+    [tn('home')+' win',t.h,model.H],['Draw',t.d,model.D],[tn('away')+' win',t.a,model.A],
+    ['Over 2.5 goals',t.ov,model.O],['Both teams score',t.bt,model.B]
+  ];
+  tb.innerHTML=rows.map(function(r){
+    return '<tr><td>'+esc(r[0])+'</td><td class="num">'+(r[1]==null?'—':pct(r[1]))+'</td><td class="num">'+pct(r[2])+'</td></tr>';
+  }).join('');
+  note.textContent='Expected goals fitted: '+tn('home')+' '+model.lh.toFixed(2)+', '+tn('away')+' '+model.la.toFixed(2)+'. The profile above adjusts the goals model until every market matches the bookmaker column exactly, so the goals model only decides how the markets overlap.';
+}
+function stakesNow(o){
+  return BETS.map(function(b,i){var v=numOf('s_'+b.id);return (isFinite(v)&&v>0&&o[i])?v:0;});
+}
+function renderMix(S){
+  var o=oddsArr(),s=stakesNow(o),tot=0;
+  BETS.forEach(function(b,i){
+    $('n_'+b.id).textContent=b.label();
+    $('od_'+b.id).textContent=o[i]?o[i].toFixed(2):'—';
+    $('s_'+b.id).disabled=!o[i];
+    $('pay_'+b.id).textContent=(o[i]&&s[i])?money(s[i]*o[i]):'—';
+    tot+=s[i];
+  });
+  var st=$('mixstatus');
+  if(isFinite(S)&&S>0){
+    var diff=S-tot,txt='Staked '+money(tot)+' of '+money(S);
+    if(diff>0.5)txt+='. '+money(diff)+' is unassigned and stays with you.';
+    else if(diff<-0.5)txt+='. That is '+money(-diff)+' over your budget.';
+    else txt+='. Fully assigned.';
+    st.textContent=txt;st.className='status'+(diff<-0.5?' warn':'');
+  }else{st.textContent='';}
+  var out=$('mixout');
+  if(!model){out.innerHTML='<p class="story muted">Enter valid odds for home win, draw and away win to see the outcome profile.</p>';return;}
+  if(tot<=0){out.innerHTML='<p class="story muted">Add a stake to at least one bet to see the profile.</p>';return;}
+  var stt=stats(s,o);
+  var rows={},order=[];
+  groups.forEach(function(g){
+    var r=0;for(var i=0;i<s.length;i++)if(s[i]&&((g.mask>>i)&1))r+=s[i]*o[i];
+    var net=r-tot,key=net.toFixed(2);
+    if(!rows[key]){rows[key]={net:net,p:0,gs:[]};order.push(key);}
+    rows[key].p+=g.p;rows[key].gs.push(g);
+  });
+  var list=order.map(function(k){return rows[k];}).sort(function(a,b){return a.net-b.net;});
+  var maxP=Math.max.apply(null,list.map(function(r){return r.p;}));
+  var resName={h:tn('home')+' win',d:'Draw',a:tn('away')+' win'},ouName={ov:'Over 2.5',un:'Under 2.5'},btName={by:'Both score',bn:'Not both score'};
+  var prows=list.map(function(r){
+    var tags=[];
+    [['res',resName],['ou',ouName],['bt',btName]].forEach(function(dim){
+      var first=r.gs[0][dim[0]],same=r.gs.every(function(g){return g[dim[0]]===first;});
+      if(same)tags.push(dim[1][first]);
+    });
+    var cells=[];r.gs.forEach(function(g){cells=cells.concat(g.cells);});
+    cells.sort(function(a,b){return b.p-a.p;});
+    var scores=cells.slice(0,4).map(function(c){return c.x+'-'+c.y;}).join(', ');
+    var bc=r.net>0.005?'g':(r.net<-0.005?'l':'z');
+    return '<div class="prow"><div class="net '+cls(r.net)+'">'+smoney(r.net)+'</div>'+
+      '<div class="barline"><div class="bar"><i class="'+bc+'" style="width:'+(r.p/maxP*100).toFixed(1)+'%"></i></div><em>'+pct(r.p)+'</em></div>'+
+      '<div class="meta">'+(tags.length?esc(tags.join(' · '))+'. ':'')+'Likely scores: '+scores+'</div></div>';
+  }).join('');
+  var pLose=1-stt.pNo;
+  var story;
+  if(pLose<0.0005){story='You do not lose money in any result of this match.';}
+  else{story='You lose money in <b>'+pct(pLose)+'</b> of matches, by as much as <b class="loss">'+money(-stt.min)+'</b>.';}
+  story+=' Averaged over many matches the result is <b class="'+cls(stt.ev)+'">'+smoney(stt.ev)+'</b> per match.';
+  var evnote='';
+  if(stt.ev>0.005)evnote='<p class="small warn story">A positive average means the odds you typed leave a gap in the bookmaker\'s prices. Check each number before relying on it.</p>';
+  out.innerHTML='<div class="metrics">'+
+    '<div class="metric"><span>Staked</span><b>'+money(tot)+'</b></div>'+
+    '<div class="metric"><span>Worst case</span><b class="'+cls(stt.min)+'">'+smoney(stt.min)+'</b></div>'+
+    '<div class="metric"><span>Best case</span><b class="'+cls(stt.max)+'">'+smoney(stt.max)+'</b></div>'+
+    '<div class="metric"><span>Chance you do not lose</span><b>'+pct(stt.pNo)+'</b></div>'+
+    '<div class="metric"><span>Chance you profit</span><b>'+pct(stt.pWin)+'</b></div>'+
+    '<div class="metric"><span>Average per match</span><b class="'+cls(stt.ev)+'">'+smoney(stt.ev)+'</b></div></div>'+
+    '<p class="story">'+story+'</p>'+evnote+
+    '<h3>If the match finishes</h3>'+prows;
+}
+
+/* ---------- parlay ---------- */
+var DEFAULT_LEGS=[
+  {label:'Match A, home win',odds:'1.85',m:'6'},
+  {label:'Match B, over 2.5 goals',odds:'1.90',m:'5'},
+  {label:'Match C, away win',odds:'2.20',m:'6'}
+];
+var legs=DEFAULT_LEGS.map(function(l){return {label:l.label,odds:l.odds,m:l.m};});
+function renderLegRows(){
+  $('legs').innerHTML=legs.map(function(l,i){
+    return '<div class="legrow">'+
+      '<div class="field lab"><label for="leg_'+i+'_label">Leg '+(i+1)+'</label><input class="leg plain" type="text" id="leg_'+i+'_label" data-i="'+i+'" data-k="label" value="'+esc(l.label)+'" autocomplete="off"></div>'+
+      '<div class="field"><label for="leg_'+i+'_odds">Odds</label><input class="leg" type="text" inputmode="decimal" id="leg_'+i+'_odds" data-i="'+i+'" data-k="odds" value="'+esc(l.odds)+'" autocomplete="off"></div>'+
+      '<div class="field"><label for="leg_'+i+'_m">Market margin %</label><input class="leg" type="text" inputmode="decimal" id="leg_'+i+'_m" data-i="'+i+'" data-k="m" value="'+esc(l.m)+'" autocomplete="off"></div>'+
+      '<button class="btn sm" type="button" data-rm="'+i+'" aria-label="Remove leg '+(i+1)+'">Remove</button></div>';
+  }).join('');
+}
+function renderParlay(S){
+  var out=$('parlayout');
+  var prod=1,fair=1,eff=1,n=0,firstM=null;
+  legs.forEach(function(l){
+    var o=parseNum(l.odds),m=parseNum(l.m);
+    if(!(o>1.0001))return;
+    if(!isFinite(m)||m<0)m=6;
+    prod*=o;fair*=1/(o*(1+m/100));eff*=1/(1+m/100);n++;
+    if(firstM==null)firstM=m;
+  });
+  if(!isFinite(S)||S<=0||n<2){out.innerHTML='<p class="muted" style="margin-top:14px">Enter at least two legs with odds and a total to bet.</p>';return;}
+  var ev=S*(eff-1),single=S*(1/(1+firstM/100)-1);
+  out.innerHTML='<div class="metrics">'+
+    '<div class="metric"><span>Combined odds</span><b>'+prod.toFixed(2)+'</b></div>'+
+    '<div class="metric"><span>Pays if all win</span><b>'+money(S*prod)+'</b></div>'+
+    '<div class="metric"><span>Chance all '+n+' win</span><b>'+pct(fair)+'</b></div>'+
+    '<div class="metric"><span>Break-even chance</span><b>'+pct(1/prod)+'</b></div>'+
+    '<div class="metric"><span>Average cost</span><b class="loss">'+smoney(ev)+'</b></div>'+
+    '<div class="metric"><span>House edge</span><b>'+pct(1-eff)+'</b></div></div>'+
+    '<p class="story">Roughly 1 in '+(1/fair).toFixed(1)+' of these parlays wins. One single bet of '+money(S)+' at a '+firstM.toFixed(1)+'% margin costs about '+money(-single)+' on average. This '+n+'-leg parlay costs about '+money(-ev)+'. Splitting the same money into separate single bets keeps the cost near the single-bet figure.</p>';
+}
+
+/* ---------- state, persistence, wiring ---------- */
+var KEY='stake-splitter-v1';
+var defaults={};
+function allIns(){return Array.prototype.slice.call(document.querySelectorAll('.in'));}
+function objVal(){var r=document.querySelector('input[name=obj]:checked');return r?r.value:'keep';}
+function save(){
+  try{
+    var d={v:{},legs:legs,obj:objVal()};
+    allIns().forEach(function(el){d.v[el.id]=el.value;});
+    localStorage.setItem(KEY,JSON.stringify(d));
+  }catch(e){}
+}
+function load(){try{var r=localStorage.getItem(KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
+function fmtNum(v){return String(Math.round(v*100)/100);}
+function setStakes(arr){BETS.forEach(function(b,i){$('s_'+b.id).value=fmtNum(arr[i]||0);});}
+function useLock(mi){
+  var S=numOf('stake');if(!isFinite(S)||S<=0)return;
+  var l=lockFor(MARKETS[mi],S);if(!l)return;
+  var w=BETS.map(function(){return 0;});
+  MARKETS[mi].ids.forEach(function(id,k){w[id]=l.stakes[k];});
+  setStakes(alloc(w,Math.round(S)));
+  update();
+}
+function update(){
+  var S=numOf('stake');
+  $('lab_h').textContent=tn('home')+' win';
+  $('lab_a').textContent=tn('away')+' win';
+  Array.prototype.forEach.call(document.querySelectorAll('#chips .chip'),function(c){
+    c.classList.toggle('on',isFinite(S)&&Math.abs(S-parseFloat(c.getAttribute('data-v')))<1e-9);
+  });
+  buildModel();
+  var locks=locksAll(S);
+  renderVerdict(S,locks);
+  renderLock(S,locks);
+  renderFit();
+  renderMix(S);
+  renderParlay(S);
+  save();
+}
+
+function init(){
+  $('mixtable').innerHTML=BETS.map(function(b){
+    return '<tr><td id="n_'+b.id+'"></td><td class="num" id="od_'+b.id+'"></td>'+
+      '<td class="in-cell"><input class="in" type="text" inputmode="decimal" id="s_'+b.id+'" value="0" aria-label="Stake on '+b.id+'" autocomplete="off"></td>'+
+      '<td class="num" id="pay_'+b.id+'"></td></tr>';
+  }).join('');
+  allIns().forEach(function(el){defaults[el.id]=el.value;});
+  var saved=load(),hasStakes=false;
+  if(saved&&saved.v){
+    Object.keys(saved.v).forEach(function(id){var el=$(id);if(el&&el.classList.contains('in'))el.value=saved.v[id];});
+    hasStakes=true;
+    if(saved.legs&&saved.legs.length){legs=saved.legs.map(function(l){return {label:String(l.label||''),odds:String(l.odds||''),m:String(l.m||'')};});}
+    if(saved.obj){var r=$('obj_'+saved.obj);if(r)r.checked=true;}
+  }
+  renderLegRows();
+  if(!hasStakes){
+    var S=numOf('stake'),l=lockFor(MARKETS[0],S);
+    if(l){var w=BETS.map(function(){return 0;});MARKETS[0].ids.forEach(function(id,k){w[id]=l.stakes[k];});setStakes(alloc(w,Math.round(S)));}
+  }
+  document.addEventListener('input',function(e){
+    var t=e.target;
+    if(t.classList&&t.classList.contains('leg')){
+      var i=parseInt(t.getAttribute('data-i'),10),k=t.getAttribute('data-k');
+      if(legs[i])legs[i][k]=t.value;
+    }
+    update();
+  });
+  document.addEventListener('change',function(e){if(e.target&&e.target.name==='obj')update();});
+  document.addEventListener('click',function(e){
+    var t=e.target;if(!t||!t.closest)return;
+    var chip=t.closest('#chips .chip');
+    if(chip){$('stake').value=chip.getAttribute('data-v');update();return;}
+    var lk=t.closest('[data-lock]');
+    if(lk){useLock(parseInt(lk.getAttribute('data-lock'),10));return;}
+    var rm=t.closest('[data-rm]');
+    if(rm){legs.splice(parseInt(rm.getAttribute('data-rm'),10),1);renderLegRows();update();return;}
+  });
+  $('addleg').addEventListener('click',function(){
+    if(legs.length>=10)return;
+    legs.push({label:'Match '+String.fromCharCode(65+legs.length)+', pick',odds:'1.90',m:'6'});
+    renderLegRows();update();
+  });
+  $('clearmix').addEventListener('click',function(){setStakes(BETS.map(function(){return 0;}));$('optnote').textContent='';update();});
+  $('reset').addEventListener('click',function(){
+    allIns().forEach(function(el){if(defaults[el.id]!=null)el.value=defaults[el.id];});
+    legs=DEFAULT_LEGS.map(function(l){return {label:l.label,odds:l.odds,m:l.m};});
+    renderLegRows();
+    var S=numOf('stake'),l=lockFor(MARKETS[0],S);
+    if(l){var w=BETS.map(function(){return 0;});MARKETS[0].ids.forEach(function(id,k){w[id]=l.stakes[k];});setStakes(alloc(w,Math.round(S)));}
+    $('optnote').textContent='';
+    update();
+  });
+  $('optimize').addEventListener('click',function(){
+    buildModel();
+    var obj=objVal(),step=parseInt($('step').value,10)||5;
+    var res=optimize(obj,step);
+    if(!res){$('optnote').textContent='Enter a total to bet and valid odds first.';return;}
+    setStakes(res);
+    var what={floor:'the smallest worst case',keep:'the best chance of keeping your money',ev:'the smallest average loss'}[obj];
+    $('optnote').textContent='Best split found for '+what+', in steps of ₹'+step+'. Change any stake by hand to compare.';
+    update();
+  });
+  update();
+}
+init();
+})();
+</script>
+
+</body></html>
